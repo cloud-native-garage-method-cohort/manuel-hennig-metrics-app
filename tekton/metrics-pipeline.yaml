@@ -1,0 +1,58 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: manuel-hennig-react-app
+spec:
+  workspaces:
+    - name: pipeline-shared-data
+  tasks:
+    - name: clone-repository
+      taskRef:
+        name: git-clone
+        kind: ClusterTask
+      params:
+        - name: url
+          value: https://github.com/cloud-native-garage-method-cohort/manuel-hennig-metrics-app.git
+      workspaces:
+        - name: output
+          workspace: pipeline-shared-data
+    - name: npm-cit
+      taskRef:
+        name: npm
+      params:
+        - name: ARGS
+          value:
+            - install-ci-test
+      workspaces:
+        - name: source
+          workspace: pipeline-shared-data
+      runAfter: 
+        - clone-repository
+    - name: build-image
+      taskRef:
+        name: buildah
+        kind: ClusterTask
+      params:
+        - name: IMAGE
+          value: "quay.io/manuelhennig/express-sample-app:$(tasks.clone-repository.results.commit)"
+      workspaces:
+        - name: source
+          workspace: pipeline-shared-data
+      runAfter:
+        - npm-cit
+    - name: kustomize-build
+      runAfter:
+        - build-image
+      params:
+        - name: app-namespace
+          value: manuel-hennig-pipeline-from-scratch
+        - name: app-name
+          value: express-sample-app
+        - name: image-with-tag
+          value: "quay.io/manuelhennig/express-sample-app:$(tasks.clone-repository.results.commit)"
+      taskRef:
+        kind: Task
+        name: kustomize-build
+      workspaces:
+        - name: source
+          workspace: pipeline-shared-data
